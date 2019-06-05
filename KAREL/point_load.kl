@@ -1,0 +1,300 @@
+--* coding: Shift-jis *--
+--
+--  --------------------------------------
+--  Released under the Apache 2.0 License.
+--  Yuki Meguro
+--  https://github.com/yuki-meguro
+--  --------------------------------------
+--
+--  --------------------------------------
+--  Author: Yuki Meguro
+--
+--  Description:
+--    Load "point_save.kl" Robot Position Data
+--
+--  Dependancies: point_save.kl
+--                  ('Program name' and 'CONST')
+--  --------------------------------------
+
+PROGRAM point_load
+%NOLOCKGROUP
+%SYSTEM
+%NOPAUSESHFT
+%NOPAUSE=ERROR+COMMAND+TPENABLE
+%COMMENT = 'Load pg.'
+TYPE
+rtrn1 = STRUCTURE
+    list: ARRAY[3] OF INTEGER
+ENDSTRUCTURE
+
+CONST
+    --  # レジスタ割付 自動
+    --
+    --  (Auto: 0 / Manual: 1)
+    --  レジスタ割付を自動で行います。
+    --  使用レジスタは'point_save' 
+    --  CONST内の'nreg_begin'の値から-5
+    --  (ex:) nreg_begin = 20 であれば、
+    --        15,16,17,18,19を専有します。
+    ---------------------------------------------------
+       auto_reg = 1
+
+    -- # Karel動作
+    --
+    --  (Karel: 0 / TP: 1)
+    --  Karelプログラム上でロボットを動作させます。
+    --  記憶されている教示点数だけロボットが動作します。
+    -----------------------------------------------------
+        karel_move = 0
+
+    --  # レジスタ割付
+    --
+    --  レジスタ割付を手動にした場合
+    --  任意の数字を使用してください。
+    --  TPプログラムも同様に合わせ込む必要があります。
+    -----------------------------------------------------
+        uframe_reg_ = 1  -- ユーザー座標格納 数値レジスタ
+        utool_reg_ = 2   -- ツール座標格納 数値レジスタ
+        motype_reg_ = 3   -- 動作形式格納 数値レジスタ
+        calc1_reg_ = 4   -- TPプログラム計算用1 数値レジスタ
+        calc2_reg_ = 5   -- TPプログラム計算用2 数値レジスタ
+
+    --  # プログラム名指定
+    --
+    --  ポイント登録用プログラムの名前を指定します。
+    --  初期設定では 'point_save' です。
+    --  point_save.klのProgram名を変更した場合のみ
+    --  変更してください 。
+    ---------------------------------------------
+        main_prog = 'point_save'
+
+    --  # Robot ID check
+    --
+    --  ID_chk_ (check: 0 / dont check: 1)
+    --  製番を参照し、合致しない場合にはプログラムを
+    --  終了させます。
+    --  使用する際には製番を正しく設定して下さい。 
+    ---------------------------------------------------
+        ID_chk_ = 1
+        serial_no = 'MA00000'
+
+    --  //////////////////////////
+    --  //////以下、編集禁止//////
+    --  //////////////////////////
+
+
+VAR
+    nreg_begin,
+    nreg_end,
+    preg_begin,
+    preg_end,
+    point_reg: INTEGER
+
+    uframe_reg,
+    utool_reg,
+    motype_reg,
+    calc1_reg,
+    calc2_reg: INTEGER
+
+    mo_data: rtrn1
+
+    ROUTINE id_chk
+    VAR
+        stat,
+        entry: INTEGER
+        sys_val: STRING[10]
+    BEGIN
+        IF ID_chk_ = 0 THEN
+            GET_VAR(entry,'*SYSTEM*','$PRODUCT_ID',sys_val,stat)
+            IF sys_val <> serial_no THEN    
+                WRITE TPERROR (CHR(128), CR)
+                WRITE TPERROR('Robot ID is invalid', CR)
+                ABORT
+            ENDIF
+        ENDIF
+    END id_chk
+
+    ROUTINE pipe_prog
+    CONST
+        uninit_ = 12311
+    VAR
+        var_name: ARRAY[5] OF STRING[20]
+        var_val: ARRAY[5] OF INTEGER
+        stat,
+        entry: INTEGER
+        i: INTEGER
+    BEGIN
+        var_name[1] = 'NREG[1]'
+        var_name[2] = 'NREG[2]'
+        var_name[3] = 'PREG[1]'
+        var_name[4] = 'PREG[2]'
+        var_name[5] = 'NREG[3]'
+        FOR i = 1 TO 5 DO
+            GET_VAR(entry, main_prog, var_name[i], var_val[i], stat)
+            IF stat = uninit_ THEN
+                WRITE TPERROR (CHR(128), CR)
+                WRITE TPERROR('Register data null.', CR)
+                POST_ERR(stat,'',0, 2)
+            ENDIF
+        ENDFOR
+
+        ----------------------
+        --Set Global variables
+        ----------------------
+        nreg_begin = var_val[1]
+        nreg_end = var_val[2]
+        preg_begin = var_val[3]
+        preg_end = var_val[4]
+        point_reg = var_val[5]
+    END pipe_prog
+
+    ROUTINE reg_pointer
+    BEGIN
+        IF auto_reg = 0 THEN    --Auto
+            uframe_reg = nreg_begin - 5
+            utool_reg = nreg_begin - 4
+            motype_reg = nreg_begin - 3
+            calc1_reg = nreg_begin - 2
+            calc2_reg = nreg_begin - 1
+        ELSE    --Manual
+            uframe_reg = uframe_reg_
+            utool_reg = utool_reg_
+            motype_reg = motype_reg_
+            calc1_reg = calc1_reg_
+            calc2_reg = calc2_reg_
+        ENDIF
+    END reg_pointer
+
+    ROUTINE reg_name_set
+    VAR
+        stat: INTEGER
+    BEGIN
+        SET_REG_CMT(uframe_reg, 'org_uframe', stat)
+        SET_REG_CMT(utool_reg, 'org_utool', stat)
+        SET_REG_CMT(motype_reg, 'motype', stat)
+        SET_REG_CMT(calc1_reg, 'calc1', stat)
+        SET_REG_CMT(calc2_reg, 'calc2', stat)
+    END reg_name_set
+
+    ROUTINE data_cut: rtrn1
+    VAR
+        i,
+        j: INTEGER
+        target_no: INTEGER
+        real_flag: BOOLEAN
+        point_no,
+        mo_num: INTEGER
+        get_int: INTEGER
+        trash_real: REAL
+        stat: INTEGER
+        conv_str: STRING[128]
+        cut_int: ARRAY[3] OF INTEGER
+        outdata: rtrn1
+        cut_str: ARRAY[3] OF STRING[5]
+    BEGIN
+        GET_REG(point_reg, real_flag, get_int, trash_real, stat)
+        point_no = get_int
+        target_no = nreg_begin + point_no - 1
+        GET_REG(target_no, real_flag, get_int, trash_real, stat)
+        mo_num = get_int
+        CNV_INT_STR(mo_num, 0, 0, conv_str)
+
+        FOR i = 1 TO 3 DO
+            j = i * 2
+            cut_str[i] = SUB_STR(conv_str, j, 2)
+            CNV_STR_INT(cut_str[i], outdata.list[i])
+        ENDFOR
+        RETURN(outdata)
+    END data_cut
+
+    ROUTINE set_reg(in_data: rtrn1)
+    VAR
+        stat: INTEGER
+        i: INTEGER
+        data_ls: ARRAY[3] OF INTEGER
+    BEGIN
+        FOR i = 1 TO 3 DO
+            data_ls[i] = in_data.list[i]
+        ENDFOR
+
+        SET_INT_REG(motype_reg, data_ls[1], stat)
+        SET_INT_REG(uframe_reg, data_ls[2], stat)
+        SET_INT_REG(utool_reg, data_ls[3], stat)
+    END set_reg
+
+    ROUTINE get_prm(prm_no: INTEGER): INTEGER
+    CONST
+        null = 17042
+    VAR
+        stat: INTEGER
+        data_type: INTEGER
+        get_int: INTEGER
+        dummy_real: REAL    --unused
+        dummy_str: STRING[10]   --unused
+    BEGIN
+        GET_TPE_PRM(prm_no, data_type, get_int, dummy_real, dummy_str, stat)
+        IF stat = null THEN
+            RETURN(0)
+        ELSE
+            RETURN(1)
+        ENDIF
+    END get_prm
+
+    ROUTINE clr_data
+    CONST
+        char = 'Karel Reserved.'
+    VAR
+        stat: INTEGER
+        i: INTEGER
+        ls: ARRAY[6] OF INTEGER
+    BEGIN
+        FOR i = nreg_begin TO nreg_end DO
+            SET_INT_REG(i, 0, stat)
+            SET_REG_CMT(i, char, stat)
+        ENDFOR
+
+        FOR i = preg_begin TO preg_end DO
+            CLR_POS_REG(i, 1, stat) 
+            SET_PREG_CMT(i, char, stat)
+        ENDFOR   
+
+        ls[1]= point_reg
+        ls[2]= uframe_reg
+        ls[3]= utool_reg
+        ls[4]= motype_reg
+        ls[5]= calc1_reg
+        ls[6]= calc2_reg
+        FOR i = 1 TO 6 DO
+            SET_REG_CMT(ls[i], char, stat)
+            SET_INT_REG(ls[i], 0, stat)
+        ENDFOR
+
+    END clr_data
+
+    ROUTINE main
+    VAR
+        func_status: INTEGER
+    BEGIN
+        id_chk
+        func_status = get_prm(1)
+        IF func_status = 0 THEN
+            pipe_prog
+            reg_pointer
+            reg_name_set
+            mo_data = data_cut
+            set_reg(mo_data)
+        ELSE
+            pipe_prog
+            reg_pointer
+            clr_data
+        ENDIF
+    END main
+
+%INCLUDE mover
+    
+BEGIN
+    main
+    IF karel_move = 0 THEN
+        sub1
+    ENDIF
+END point_load

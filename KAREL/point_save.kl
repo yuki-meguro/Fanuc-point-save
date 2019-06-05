@@ -1,0 +1,281 @@
+--* coding: Shift-jis *--
+--
+--  --------------------------------------
+--  Released under the Apache 2.0 License.
+--  Yuki Meguro
+--  https://github.com/yuki-meguro
+--  --------------------------------------
+--
+--  --------------------------------------
+--  Author: Yuki Meguro
+--
+--  Description:
+--    Save Robot Position. 
+--
+--  Dependancies: none
+--  --------------------------------------
+
+PROGRAM point_save
+%ALPHABETIZE
+%NOLOCKGROUP
+%SYSTEM
+%NOPAUSESHFT
+%NOPAUSE=ERROR+COMMAND+TPENABLE
+%COMMENT = 'Save pg.'
+CONST
+    --  # 動作情報 数値・位置 レジスタ割付
+    --
+    --  数値レジスタ(nreg)・位置レジスタ(preg)の
+    --  開始点(xreg_begin)と範囲(reg_range)を
+    --  変更できます。
+    ------------------------------------------------
+        nreg_begin = 20
+        preg_begin = 20
+        reg_range = 20
+
+    --  # 教示点数 数値レジスタ割付
+    --
+    --  位置レジスタに登録済みの教示点数を記憶します。
+    ---------------------------------------------------
+        point_reg = 19
+
+    --  # Robot ID check
+    --
+    --  ID_chk_ (check: 0 / dont check: 1)
+    --  製番を参照し、合致しない場合にはプログラムを
+    --  終了させます。
+    --  使用する際には製番を正しく設定して下さい。 
+    ---------------------------------------------------
+        ID_chk_ = 1
+        serial_no = 'MA00000'
+
+
+    --  //////////////////////////
+    --  //////以下、編集禁止//////
+    --  //////////////////////////
+
+    
+VAR
+    ------------------
+    --Global variables
+    ------------------
+    uframe_no,
+    utool_no: INTEGER
+    prm1,
+    prm2: INTEGER
+    point: XYZWPREXT
+    nreg: ARRAY[3] OF INTEGER   --[1] nreg_begin [2] nreg_end [3] point_int
+    preg: ARRAY[2] OF INTEGER   --[1] preg_begin [2] preg_end
+
+    ---------
+    --ROUTINE
+    ---------
+    ROUTINE id_chk
+    VAR
+        stat,
+        entry: INTEGER
+        sys_val: STRING[10]
+    BEGIN
+        IF ID_chk_ = 0 THEN
+            GET_VAR(entry,'*SYSTEM*','$PRODUCT_ID',sys_val,stat)
+            IF sys_val <> serial_no THEN    
+                WRITE TPERROR (CHR(128), CR)
+                WRITE TPERROR('Robot ID is invalid', CR)
+                ABORT
+            ENDIF
+        ENDIF
+    END id_chk
+
+    ROUTINE pipe_cons
+    VAR
+        nreg_end,
+        preg_end: INTEGER
+    BEGIN
+        nreg_end = nreg_begin + reg_range - 1
+        preg_end = preg_begin + reg_range - 1
+        ----------------------
+        --Set Global variables
+        ----------------------
+        nreg[1] = nreg_begin
+        nreg[2] = nreg_end
+        nreg[3] = point_reg
+        preg[1] = preg_begin
+        preg[2] = preg_end
+        
+    END pipe_cons
+
+    ROUTINE uframe
+    VAR
+        uframe_: POSITION
+    BEGIN
+        uframe_no = $MNUFRAMENUM[1]
+        IF uframe_no = 0 THEN
+            $UFRAME = $MOR_GRP[1].$NILPOS
+            uframe_ = $MOR_GRP[1].$NILPOS
+        ELSE
+            $UFRAME = $MNUFRAME[1, uframe_no]
+            uframe_ = $MNUFRAME[1,uframe_no]
+        ENDIF   
+    END uframe
+
+    ROUTINE utool
+    VAR
+        utool_: POSITION
+    BEGIN
+        utool_no = $MNUTOOLNUM[1]
+        $UTOOL = $MNUTOOL[1, utool_no]
+        utool_ = $MNUTOOL[1, utool_no]
+    END utool
+
+    ROUTINE get_pos
+    VAR
+        v_mask, g_mask: INTEGER
+    BEGIN
+        point = CURPOS(v_mask, g_mask)
+    END get_pos
+
+    ROUTINE get_prm(prm_no: INTEGER): INTEGER
+    CONST
+        null = 17042
+    VAR
+        stat: INTEGER
+        data_type: INTEGER
+        get_int: INTEGER
+        dummy_real: REAL    --unused
+        dummy_str: STRING[10]   --unused
+    BEGIN
+        GET_TPE_PRM(prm_no, data_type, get_int, dummy_real, dummy_str, stat)
+        IF (prm_no = 1) AND (stat = null) THEN
+            WRITE TPERROR (CHR(128), CR)
+            WRITE TPERROR('PRM Value Err.', CR)
+            WRITE(data_type)
+            stat = null
+            POST_ERR(stat,'',0, 2) 
+        ENDIF
+        RETURN(get_int)
+    END get_prm
+
+    ROUTINE nreg_val(hoge: INTEGER): INTEGER    --"hoge" is dummy
+    CONST
+        null = 17042
+    VAR
+        stat: INTEGER
+        cal_int : ARRAY[3] OF INTEGER
+        i: INTEGER
+        ans: INTEGER
+    BEGIN
+        ans = 0
+            --Initialize
+        SELECT prm2 OF
+            CASE(0):
+                cal_int[1] = 100000 --JOINT
+            CASE(1):
+                cal_int[1] = 200000 --LINEAR
+            CASE(2):
+                cal_int[1] = 300000 --CIRCULAR 
+            ELSE:
+                WRITE TPERROR (CHR(128), CR)
+                WRITE TPERROR('PRM Value Err.', CR)
+                stat = null
+                POST_ERR(stat,'',0, 2)
+        ENDSELECT
+        cal_int[2] = uframe_no * 100
+        cal_int[3] = utool_no
+        FOR i = 1 TO 3 DO
+            ans = ans + cal_int[i]
+        ENDFOR
+        RETURN(ans)
+    END nreg_val
+
+    ROUTINE nreg_ctr(prm1: INTEGER; reg_val: INTEGER)
+    CONST
+        char = 'point'
+        char2 = 'point_int'
+        char3 = 'Karel Reserved.'
+    VAR
+        stat: INTEGER
+        i: INTEGER
+        nreg_no: INTEGER
+        conv_str: STRING[5]
+        reg_pls1: INTEGER
+    BEGIN
+        nreg_no = nreg[1] + prm1 - 1
+        IF (nreg_no < nreg[1]) OR (nreg_no > nreg[2]) THEN
+            WRITE(CHR(137),CHR(128))
+            FORCE_SPMENU(TP_PANEL,SPI_TPUSER,1)
+            WRITE('No more registrable space', CR)
+            ABORT
+        ENDIF
+        CNV_INT_STR(prm1, 0, 0, conv_str)
+
+        SET_REG_CMT(nreg_no, char + conv_str, stat)
+        SET_INT_REG(nreg_no, reg_val, stat)
+
+        SET_REG_CMT(point_reg, char2, stat)
+        SET_INT_REG(point_reg, prm1, stat)
+
+        reg_pls1 = nreg_no + 1
+        FOR i = reg_pls1 TO nreg[2] DO
+            SET_INT_REG(i, 0, stat)
+            SET_REG_CMT(i, char3, stat)
+        ENDFOR
+    END nreg_ctr
+
+    ROUTINE preg_ctr(prm1: INTEGER; point: XYZWPREXT)
+    CONST
+        char = 'point'
+        char2 = '==Reserve=='
+    VAR
+        stat: INTEGER
+        i: INTEGER
+        preg_no: INTEGER
+        reg_pls1: INTEGER
+        cnv_str: STRING[5]
+        preg_name: STRING[20]
+    BEGIN
+        preg_no = preg[1] + prm1 -1
+        IF (preg_no < preg[1]) OR (preg_no > preg[2]) THEN
+            WRITE(CHR(137),CHR(128))
+            FORCE_SPMENU(TP_PANEL,SPI_TPUSER,1)
+            WRITE('No more registrable space', CR)
+            ABORT
+        ENDIF
+
+        CNV_INT_STR(prm1, 0, 0, cnv_str)
+        preg_name = char + cnv_str
+        SET_PREG_CMT(preg_no, preg_name, stat)
+            --SET NAME
+
+        SET_EPOS_REG(preg_no, point, stat)
+            --SET VALUE
+
+        reg_pls1 = preg_no + 1
+        FOR i = reg_pls1 TO preg[2] DO
+            CLR_POS_REG(i, 1, stat) 
+            SET_PREG_CMT(i, char2, stat)
+        ENDFOR
+    END preg_ctr
+
+    ROUTINE main
+    CONST
+        hoge = 12345678 --"hoge" is dummy
+    VAR
+        stat: INTEGER
+        reg_val: INTEGER
+    BEGIN
+        id_chk
+        pipe_cons
+        uframe
+        utool
+        get_pos
+        prm1 = get_prm(1)
+        prm2 = get_prm(2)
+        reg_val = nreg_val(hoge)    --"hoge" is dummy
+        nreg_ctr(prm1, reg_val)
+        preg_ctr(prm1, point)
+    END main
+
+
+BEGIN
+    main
+END point_save
