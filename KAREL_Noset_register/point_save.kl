@@ -1,0 +1,222 @@
+--* coding: Shift-jis *--
+--
+--  --------------------------------------
+--  Released under the Apache 2.0 License.
+--  Yuki Meguro
+--  https://github.com/yuki-meguro
+--  --------------------------------------
+--
+--  --------------------------------------
+--  Author: Yuki Meguro
+--
+--  Description:
+--    Save Robot Position. 
+--
+--  Dependancies: none
+--  --------------------------------------
+
+PROGRAM point_save
+%STACKSIZE = 4000
+%ALPHABETIZE
+%NOLOCKGROUP
+%SYSTEM
+%NOPAUSESHFT
+%NOPAUSE=ERROR+COMMAND+TPENABLE
+%COMMENT = 'Save pg.'
+TYPE
+register = STRUCTURE
+    motion_data: ARRAY[30] OF INTEGER
+    position_data: ARRAY[30] OF XYZWPREXT
+ENDSTRUCTURE
+CONST
+    --  # Robot ID check
+    --
+    --  ID_chk_ (check: 0 / dont check: 1)
+    --  製番を参照し、合致しない場合にはプログラムを
+    --  終了させます。
+    --  使用する際には製番を正しく設定して下さい。 
+    ---------------------------------------------------
+        ID_chk_ = 1
+        serial_no = 'MA00000'
+
+    --  //////////////////////////
+    --  //////以下、編集禁止//////
+    --  //////////////////////////
+
+VAR
+    ------------------
+    --Global variables
+    ------------------
+    point_int: INTEGER
+    uframe_no,
+    utool_no: INTEGER
+    prm1,
+    prm2: INTEGER
+    point: XYZWPREXT
+    memory: register
+    ---------
+    --ROUTINE
+    ---------
+    ROUTINE id_chk
+    VAR
+        stat,
+        entry: INTEGER
+        sys_val: STRING[10]
+    BEGIN
+        IF ID_chk_ = 0 THEN
+            GET_VAR(entry,'*SYSTEM*','$PRODUCT_ID',sys_val,stat)
+            IF sys_val <> serial_no THEN    
+                WRITE TPERROR (CHR(128), CR)
+                WRITE TPERROR('Robot ID is invalid', CR)
+                ABORT
+            ENDIF
+        ENDIF
+    END id_chk
+
+    ROUTINE uframe
+    VAR
+        uframe_: POSITION
+    BEGIN
+        uframe_no = $MNUFRAMENUM[1]
+        IF uframe_no = 0 THEN
+            $UFRAME = $MOR_GRP[1].$NILPOS
+            uframe_ = $MOR_GRP[1].$NILPOS
+        ELSE
+            $UFRAME = $MNUFRAME[1, uframe_no]
+            uframe_ = $MNUFRAME[1,uframe_no]
+        ENDIF   
+    END uframe
+
+    ROUTINE utool
+    VAR
+        utool_: POSITION
+    BEGIN
+        utool_no = $MNUTOOLNUM[1]
+        $UTOOL = $MNUTOOL[1, utool_no]
+        utool_ = $MNUTOOL[1, utool_no]
+    END utool
+
+    ROUTINE get_pos
+    VAR
+        v_mask, g_mask: INTEGER
+    BEGIN
+        point = CURPOS(v_mask, g_mask)
+    END get_pos
+
+    ROUTINE get_prm(prm_no: INTEGER): INTEGER
+    CONST
+        null = 17042
+    VAR
+        stat: INTEGER
+        data_type: INTEGER
+        get_int: INTEGER
+        dummy_real: REAL    --unused
+        dummy_str: STRING[10]   --unused
+    BEGIN
+        GET_TPE_PRM(prm_no, data_type, get_int, dummy_real, dummy_str, stat)
+        IF (prm_no = 1) AND (stat = null) THEN
+            WRITE TPERROR (CHR(128), CR)
+            WRITE TPERROR('PRM Value Err.', CR)
+            WRITE(data_type)
+            stat = null
+            POST_ERR(stat,'',0, 2) 
+        ENDIF
+        RETURN(get_int)
+    END get_prm
+
+    ROUTINE max_save_chk(prm: INTEGER)
+    BEGIN
+        IF prm > 30 THEN
+            WRITE TPERROR (CHR(128), CR)
+            WRITE TPERROR('save points over.', CR)
+            ABORT
+        ENDIF
+    END max_save_chk
+
+    ROUTINE motion_mem(hoge: INTEGER): INTEGER    --"hoge" is dummy
+    CONST
+        null = 17042
+    VAR
+        stat: INTEGER
+        cal_int : ARRAY[3] OF INTEGER
+        i: INTEGER
+        ans: INTEGER
+    BEGIN
+        ans = 0
+            --Initialize
+        SELECT prm2 OF
+            CASE(0):
+                cal_int[1] = 100000 --JOINT
+            CASE(1):
+                cal_int[1] = 200000 --LINEAR
+            CASE(2):
+                cal_int[1] = 300000 --CIRCULAR 
+            ELSE:
+                WRITE TPERROR (CHR(128), CR)
+                WRITE TPERROR('PRM Value Err.', CR)
+                stat = null
+                POST_ERR(stat,'',0, 2)
+        ENDSELECT
+        cal_int[2] = uframe_no * 100
+        cal_int[3] = utool_no
+        FOR i = 1 TO 3 DO
+            ans = ans + cal_int[i]
+        ENDFOR
+        RETURN(ans)
+    END motion_mem
+
+    ROUTINE mo_set(prm1: INTEGER; mo_data: INTEGER)
+    VAR
+        i: INTEGER
+        pls1: INTEGER
+    BEGIN
+        memory.motion_data[prm1] = mo_data
+        pls1 = prm1 + 1
+        FOR i = pls1 TO 30 DO
+            memory.motion_data[i] = 0
+        ENDFOR
+        point_int = prm1
+    END mo_set
+
+    ROUTINE po_set(prm1: INTEGER; po_data: XYZWPREXT)
+        VAR
+            i: INTEGER
+            clr_pos: XYZWPREXT
+            pls1: INTEGER
+        BEGIN
+            clr_pos.x = 0
+            clr_pos.y = 0
+            clr_pos.z = 0
+            clr_pos.w = 0
+            clr_pos.p = 0
+            clr_pos.r = 0
+            memory.position_data[prm1] = po_data
+            pls1 = prm1 + 1
+            FOR i = pls1 TO 30 DO
+                memory.position_data[i] = clr_pos
+            ENDFOR
+    END po_set
+
+    ROUTINE main
+    CONST
+        hoge = 12345678 --"hoge" is dummy
+    VAR
+        stat: INTEGER
+        mo_val: INTEGER
+    BEGIN
+        id_chk
+        uframe
+        utool
+        get_pos
+        prm1 = get_prm(1)
+        max_save_chk(prm1)
+        prm2 = get_prm(2)
+        mo_val = motion_mem(hoge)    --"hoge" is dummy
+        mo_set(prm1, mo_val)
+        po_set(prm1, point)
+    END main
+
+
+BEGIN
+    main
+END point_save

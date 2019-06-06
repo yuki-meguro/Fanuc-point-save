@@ -1,0 +1,149 @@
+--* coding: Shift-jis *--
+--
+--  --------------------------------------
+--  Released under the Apache 2.0 License.
+--  Yuki Meguro
+--  https://github.com/yuki-meguro
+--  --------------------------------------
+--
+--  --------------------------------------
+--  Author: Yuki Meguro
+--
+--  Description:
+--    Load "point_save.kl" Robot Position Data
+--
+--  Dependancies: point_save.kl
+--                  ('Program name' and 'Global variables')
+--  --------------------------------------
+
+PROGRAM point_load
+%NOLOCKGROUP
+%SYSTEM
+%NOPAUSESHFT
+%NOPAUSE=ERROR+COMMAND+TPENABLE
+%COMMENT = 'Load pg.'
+TYPE
+rtrn1 = STRUCTURE
+    list: ARRAY[3] OF INTEGER
+ENDSTRUCTURE
+
+CONST
+    --  # プログラム名指定
+    --
+    --  ポイント登録用プログラムの名前を指定します。
+    --  初期設定では 'point_save' です。
+    --  point_save.klのProgram名を変更した場合のみ
+    --  変更してください 。
+    ---------------------------------------------
+        main_prog = 'point_save'
+
+    --  # Robot ID check
+    --
+    --  ID_chk_ (check: 0 / dont check: 1)
+    --  製番を参照し、合致しない場合にはプログラムを
+    --  終了させます。
+    --  使用する際には製番を正しく設定して下さい。 
+    ---------------------------------------------------
+        ID_chk_ = 1
+        serial_no = 'MA00000'
+
+
+    --  # 速度設定
+    --
+    --  ロボットの動作最高速度を設定します。
+    --  オーバーライド100%に対しての速度を
+    --  選択して下さい。
+    ----------------------------------------
+        rb_speed = 100 
+
+    --  //////////////////////////
+    --  //////以下、編集禁止//////
+    --  //////////////////////////
+
+
+VAR
+    ------------------
+    --Global variables
+    ------------------
+    mo_data: rtrn1
+
+    ROUTINE id_chk
+    VAR
+        stat,
+        entry: INTEGER
+        sys_val: STRING[10]
+    BEGIN
+        IF ID_chk_ = 0 THEN
+            GET_VAR(entry,'*SYSTEM*','$PRODUCT_ID',sys_val,stat)
+            IF sys_val <> serial_no THEN    
+                WRITE TPERROR (CHR(128), CR)
+                WRITE TPERROR('Robot ID is invalid', CR)
+                ABORT
+            ENDIF
+        ENDIF
+    END id_chk
+
+    ROUTINE data_cut: rtrn1
+    CONST
+        var_1 = 'point_int'
+        var_2 = 'memory.motion_data['
+        var_3 = ']'
+    VAR
+        stat,
+        entry: INTEGER
+        point_int: INTEGER
+        conv_str: STRING[10]
+        char: STRING[30]
+        mo_data_: INTEGER
+        cut_str: ARRAY[3] OF STRING[5]
+        out_: rtrn1
+        i, j: INTEGER
+    BEGIN
+        GET_VAR(entry, main_prog, var_1, point_int, stat)
+        WRITE(point_int)
+        --point_int = point_int - 1
+        CNV_INT_STR(point_int, 0, 0, conv_str)
+        char = var_2 + conv_str + var_3
+        GET_VAR(entry, main_prog, char, mo_data_, stat)
+        CNV_INT_STR(mo_data_, 0, 0, conv_str)
+        FOR i = 1 TO 3 DO
+            j = i * 2
+            cut_str[i] = SUB_STR(conv_str, j, 2)
+            CNV_STR_INT(cut_str[i], out_.list[i])
+        ENDFOR
+        RETURN(out_)
+    END data_cut
+
+    ROUTINE get_prm(prm_no: INTEGER): INTEGER
+    CONST
+        null = 17042
+    VAR
+        stat: INTEGER
+        data_type: INTEGER
+        get_int: INTEGER
+        dummy_real: REAL    --unused
+        dummy_str: STRING[10]   --unused
+    BEGIN
+        GET_TPE_PRM(prm_no, data_type, get_int, dummy_real, dummy_str, stat)
+        IF stat = null THEN
+            RETURN(0)
+        ELSE
+            RETURN(1)
+        ENDIF
+    END get_prm
+
+    ROUTINE main
+    VAR
+        func_status: INTEGER
+    BEGIN
+        id_chk
+        func_status = get_prm(1)
+        mo_data = data_cut
+    END main
+
+%INCLUDE mover
+    
+BEGIN
+    main
+    sub
+END point_load
