@@ -14,6 +14,18 @@
 --  Dependancies: point_load.kl
 --  --------------------------------------
 
+ROUTINE over_save: INTEGER
+VAR
+    over_: INTEGER
+BEGIN
+    over_ = $MCR.$GENOVERRIDE
+    RETURN(over_)
+END over_save
+
+ROUTINE over_set(over_: INTEGER)
+BEGIN
+    $MCR.$GENOVERRIDE = over_
+END over_set
 
 ROUTINE frame_set(mo_data: rtrn1): INTEGER
 VAR
@@ -37,28 +49,35 @@ BEGIN
     RETURN(motype_no)
 END frame_set
 
-ROUTINE load_posdata: XYZWPR
+ROUTINE load_posdata: XYZWPREXT
+CONST
+    var_1 = 'point_int'
+    var_2 = 'memory.position_data['
+    var_3 = ']'
 VAR
-    stat: INTEGER
-    real_flag: BOOLEAN
-    get_int: INTEGER
-    trash_real: REAL
-    point_no,
+    stat,
+    entry: INTEGER
+    point_int,
     target_no: INTEGER
-    point: XYZWPR
+    point: XYZWPREXT
+    conv_str: STRING[10]
+    char: STRING[30]
 BEGIN
-    GET_REG(point_reg, real_flag, get_int, trash_real, stat)
-    point_no = get_int
-    target_no = preg_begin + point_no - 1
-    point = GET_POS_REG(target_no, stat) 
+    GET_VAR(entry, main_prog, var_1, point_int, stat)
+    --point_int = point_int - 1
+    CNV_INT_STR(point_int, 0, 0, conv_str)
+    char = var_2 + conv_str + var_3
+    WRITE(char, CR)
+    GET_VAR(entry, main_prog, char, point, stat) 
+    WRITE(stat)
     RETURN(point)
 END load_posdata
 
 ROUTINE move_set(motion: INTEGER)
 BEGIN
 	--settings
-    $MCR.$GENOVERRIDE = 30
-    $SPEED = 250
+    $MCR.$GENOVERRIDE = 100
+    $SPEED = rb_speed
     $TERMTYPE = FINE
 
     SELECT motion OF
@@ -75,32 +94,39 @@ BEGIN
 END move_set
 
 ROUTINE move_it(point: XYZWPR): INTEGER
+CONST
+    var_1 = 'point_int'
 VAR
     stat: INTEGER
     real_flag: BOOLEAN
     get_int: INTEGER
     trash_real: REAL
     ans: INTEGER
+    entry: INTEGER
+    var_val: INTEGER
 BEGIN
     MOVE TO point
-    GET_REG(point_reg, real_flag, get_int, trash_real, stat)
-    ans = get_int - 1
-    IF ans > 0 THEN
-        SET_INT_REG(point_reg, ans, stat)
+    GET_VAR(entry, main_prog, var_1, var_val, stat)
+    var_val = var_val - 1
+
+    IF var_val > 0 THEN
+        SET_VAR(entry, main_prog, var_1, var_val, stat) 
         RETURN(0)
     ELSE
         RETURN(1)
     ENDIF
 END move_it
 
-ROUTINE sub1
+ROUTINE sub
 VAR
+    over_speed: INTEGER
     loop: BOOLEAN
     mo_stat: INTEGER
     motype_no: INTEGER
     point_: XYZWPR
 BEGIN
     loop = TRUE
+    over_speed = over_save
     WHILE loop DO
         motype_no = frame_set(mo_data)
         move_set(motype_no)
@@ -108,6 +134,7 @@ BEGIN
         mo_stat = move_it(point_)
         IF mo_stat = 1 THEN
             loop = FALSE
+            over_set(over_speed)
         ENDIF
     ENDWHILE
-END sub1
+END sub
