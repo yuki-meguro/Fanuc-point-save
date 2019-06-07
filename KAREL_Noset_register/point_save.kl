@@ -19,15 +19,20 @@ PROGRAM point_save
 %STACKSIZE = 4000
 %ALPHABETIZE
 %NOLOCKGROUP
+
 %SYSTEM
 %NOPAUSESHFT
 %NOPAUSE=ERROR+COMMAND+TPENABLE
 %COMMENT = 'Save pg.'
+
 TYPE
-register = STRUCTURE
-    motion_data: ARRAY[30] OF INTEGER
-    position_data: ARRAY[30] OF XYZWPREXT
-ENDSTRUCTURE
+    register = STRUCTURE
+        motion_data: ARRAY[30] OF INTEGER
+        pos_data: ARRAY[30] OF XYZWPREXT
+        --  最大記憶教示点数
+        --  配列[x]の幅を変更した場合には、
+        --  CONSTの max_save にも変更を行って下さい。
+    ENDSTRUCTURE
 CONST
     --  # Robot ID check
     --
@@ -39,21 +44,24 @@ CONST
         ID_chk_ = 1
         serial_no = 'MA00000'
 
+    --  # 教示点 最大記憶数
+    --
+    --  TYPE register に変更を行った場合のみ変更して下さい。
+    --  初期値は30です。
+    -----------------------------------------------------------
+        max_save = 30
+
     --  //////////////////////////
     --  //////以下、編集禁止//////
     --  //////////////////////////
+
 
 VAR
     ------------------
     --Global variables
     ------------------
-    point_int: INTEGER
-    uframe_no,
-    utool_no: INTEGER
-    prm1,
-    prm2: INTEGER
-    point: XYZWPREXT
     memory: register
+    p_count: INTEGER
     ---------
     --ROUTINE
     ---------
@@ -73,9 +81,10 @@ VAR
         ENDIF
     END id_chk
 
-    ROUTINE uframe
+    ROUTINE uframe: INTEGER
     VAR
         uframe_: POSITION
+        uframe_no: INTEGER
     BEGIN
         uframe_no = $MNUFRAMENUM[1]
         IF uframe_no = 0 THEN
@@ -85,22 +94,27 @@ VAR
             $UFRAME = $MNUFRAME[1, uframe_no]
             uframe_ = $MNUFRAME[1,uframe_no]
         ENDIF   
+        RETURN(uframe_no)
     END uframe
 
-    ROUTINE utool
+    ROUTINE utool: INTEGER
     VAR
         utool_: POSITION
+        utool_no: INTEGER
     BEGIN
         utool_no = $MNUTOOLNUM[1]
         $UTOOL = $MNUTOOL[1, utool_no]
         utool_ = $MNUTOOL[1, utool_no]
+        RETURN(utool_no)
     END utool
 
-    ROUTINE get_pos
+    ROUTINE get_pos: XYZWPREXT
     VAR
         v_mask, g_mask: INTEGER
+        point: XYZWPREXT
     BEGIN
         point = CURPOS(v_mask, g_mask)
+        RETURN(point)
     END get_pos
 
     ROUTINE get_prm(prm_no: INTEGER): INTEGER
@@ -117,7 +131,6 @@ VAR
         IF (prm_no = 1) AND (stat = null) THEN
             WRITE TPERROR (CHR(128), CR)
             WRITE TPERROR('PRM Value Err.', CR)
-            WRITE(data_type)
             stat = null
             POST_ERR(stat,'',0, 2) 
         ENDIF
@@ -126,14 +139,14 @@ VAR
 
     ROUTINE max_save_chk(prm: INTEGER)
     BEGIN
-        IF prm > 30 THEN
+        IF prm > max_save THEN
             WRITE TPERROR (CHR(128), CR)
             WRITE TPERROR('save points over.', CR)
             ABORT
         ENDIF
     END max_save_chk
 
-    ROUTINE motion_mem(hoge: INTEGER): INTEGER    --"hoge" is dummy
+    ROUTINE motion_mem(uframe_no: INTEGER; utool_no: INTEGER; motype_no: INTEGER): INTEGER    --"hoge" is dummy
     CONST
         null = 17042
     VAR
@@ -144,7 +157,7 @@ VAR
     BEGIN
         ans = 0
             --Initialize
-        SELECT prm2 OF
+        SELECT motype_no OF
             CASE(0):
                 cal_int[1] = 100000 --JOINT
             CASE(1):
@@ -172,10 +185,10 @@ VAR
     BEGIN
         memory.motion_data[prm1] = mo_data
         pls1 = prm1 + 1
-        FOR i = pls1 TO 30 DO
+        FOR i = pls1 TO max_save DO
             memory.motion_data[i] = 0
         ENDFOR
-        point_int = prm1
+        p_count = prm1
     END mo_set
 
     ROUTINE po_set(prm1: INTEGER; po_data: XYZWPREXT)
@@ -190,28 +203,34 @@ VAR
             clr_pos.w = 0
             clr_pos.p = 0
             clr_pos.r = 0
-            memory.position_data[prm1] = po_data
+            memory.pos_data[prm1] = po_data
             pls1 = prm1 + 1
-            FOR i = pls1 TO 30 DO
-                memory.position_data[i] = clr_pos
+            FOR i = pls1 TO max_save DO
+                memory.pos_data[i] = clr_pos
             ENDFOR
     END po_set
 
     ROUTINE main
-    CONST
-        hoge = 12345678 --"hoge" is dummy
     VAR
         stat: INTEGER
         mo_val: INTEGER
+        uframe_no,
+        utool_no: INTEGER
+        prm1,
+        prm2: INTEGER
+        motype_no: INTEGER
+        point: XYZWPREXT
+
     BEGIN
         id_chk
-        uframe
-        utool
-        get_pos
+        uframe_no = uframe
+        utool_no = utool
+        point = get_pos
         prm1 = get_prm(1)
         max_save_chk(prm1)
         prm2 = get_prm(2)
-        mo_val = motion_mem(hoge)    --"hoge" is dummy
+        motype_no = prm2
+        mo_val = motion_mem(uframe_no, utool_no, motype_no)
         mo_set(prm1, mo_val)
         po_set(prm1, point)
     END main

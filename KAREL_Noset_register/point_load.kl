@@ -14,6 +14,7 @@
 --
 --  Dependancies: point_save.kl
 --                  ('Program name' and 'Global variables')
+--                mover.kl
 --  --------------------------------------
 
 PROGRAM point_load
@@ -23,7 +24,7 @@ PROGRAM point_load
 %NOPAUSE=ERROR+COMMAND+TPENABLE
 %COMMENT = 'Load pg.'
 TYPE
-rtrn1 = STRUCTURE
+mo_reg = STRUCTURE
     list: ARRAY[3] OF INTEGER
 ENDSTRUCTURE
 
@@ -47,25 +48,19 @@ CONST
         ID_chk_ = 1
         serial_no = 'MA00000'
 
-
     --  # 速度設定
     --
     --  ロボットの動作最高速度を設定します。
     --  オーバーライド100%に対しての速度を
     --  選択して下さい。
     ----------------------------------------
-        rb_speed = 100 
+        rb_speed = 50 --(mm/sec)
 
     --  //////////////////////////
     --  //////以下、編集禁止//////
     --  //////////////////////////
 
-
-VAR
-    ------------------
-    --Global variables
-    ------------------
-    mo_data: rtrn1
+    %INCLUDE mover
 
     ROUTINE id_chk
     VAR
@@ -83,26 +78,24 @@ VAR
         ENDIF
     END id_chk
 
-    ROUTINE data_cut: rtrn1
+    ROUTINE data_cut: mo_reg
     CONST
-        var_1 = 'point_int'
+        var_1 = 'p_count'
         var_2 = 'memory.motion_data['
         var_3 = ']'
     VAR
         stat,
         entry: INTEGER
-        point_int: INTEGER
+        p_count: INTEGER
         conv_str: STRING[10]
         char: STRING[30]
         mo_data_: INTEGER
         cut_str: ARRAY[3] OF STRING[5]
-        out_: rtrn1
+        out_: mo_reg
         i, j: INTEGER
     BEGIN
-        GET_VAR(entry, main_prog, var_1, point_int, stat)
-        WRITE(point_int)
-        --point_int = point_int - 1
-        CNV_INT_STR(point_int, 0, 0, conv_str)
+        GET_VAR(entry, main_prog, var_1, p_count, stat)
+        CNV_INT_STR(p_count, 0, 0, conv_str)
         char = var_2 + conv_str + var_3
         GET_VAR(entry, main_prog, char, mo_data_, stat)
         CNV_INT_STR(mo_data_, 0, 0, conv_str)
@@ -134,16 +127,16 @@ VAR
 
     ROUTINE main
     VAR
+        mo_data: mo_reg
         func_status: INTEGER
     BEGIN
         id_chk
         func_status = get_prm(1)
         mo_data = data_cut
+        sub(mo_data)
     END main
 
-%INCLUDE mover
     
 BEGIN
     main
-    sub
 END point_load

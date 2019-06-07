@@ -27,7 +27,7 @@ BEGIN
     $MCR.$GENOVERRIDE = over_
 END over_set
 
-ROUTINE frame_set(mo_data: rtrn1): INTEGER
+ROUTINE frame_set(mo_data: mo_reg): INTEGER
 VAR
     motype_no,
     uframe_no,
@@ -51,25 +51,24 @@ END frame_set
 
 ROUTINE load_posdata: XYZWPREXT
 CONST
-    var_1 = 'point_int'
-    var_2 = 'memory.position_data['
+    var_1 = 'p_count'
+    var_2 = 'memory.pos_data['
     var_3 = ']'
 VAR
     stat,
     entry: INTEGER
-    point_int,
+    p_count,
     target_no: INTEGER
     point: XYZWPREXT
     conv_str: STRING[10]
     char: STRING[30]
 BEGIN
-    GET_VAR(entry, main_prog, var_1, point_int, stat)
-    --point_int = point_int - 1
-    CNV_INT_STR(point_int, 0, 0, conv_str)
+    GET_VAR(entry, main_prog, var_1, p_count, stat)
+    --p_count = p_count - 1
+    CNV_INT_STR(p_count, 0, 0, conv_str)
     char = var_2 + conv_str + var_3
     WRITE(char, CR)
     GET_VAR(entry, main_prog, char, point, stat) 
-    WRITE(stat)
     RETURN(point)
 END load_posdata
 
@@ -95,7 +94,7 @@ END move_set
 
 ROUTINE move_it(point: XYZWPR): INTEGER
 CONST
-    var_1 = 'point_int'
+    var_1 = 'p_count'
 VAR
     stat: INTEGER
     real_flag: BOOLEAN
@@ -108,7 +107,8 @@ BEGIN
     MOVE TO point
     GET_VAR(entry, main_prog, var_1, var_val, stat)
     var_val = var_val - 1
-
+    WRITE(var_val)
+    
     IF var_val > 0 THEN
         SET_VAR(entry, main_prog, var_1, var_val, stat) 
         RETURN(0)
@@ -117,7 +117,7 @@ BEGIN
     ENDIF
 END move_it
 
-ROUTINE sub
+ROUTINE sub(mo_data: mo_reg)
 VAR
     over_speed: INTEGER
     loop: BOOLEAN
