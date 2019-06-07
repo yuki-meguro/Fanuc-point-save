@@ -14,6 +14,7 @@
 --
 --  Dependancies: point_save.kl
 --                  ('Program name' and 'CONST')
+--                mover.kl
 --  --------------------------------------
 
 PROGRAM point_load
@@ -22,10 +23,11 @@ PROGRAM point_load
 %NOPAUSESHFT
 %NOPAUSE=ERROR+COMMAND+TPENABLE
 %COMMENT = 'Load pg.'
+
 TYPE
-rtrn1 = STRUCTURE
-    list: ARRAY[3] OF INTEGER
-ENDSTRUCTURE
+    rtrn1 = STRUCTURE
+        list: ARRAY[3] OF INTEGER
+    ENDSTRUCTURE
 
 CONST
     --  # レジスタ割付 自動
@@ -82,20 +84,17 @@ CONST
     --  //////以下、編集禁止//////
     --  //////////////////////////
 
-
 VAR
     nreg_begin,
     nreg_end,
     preg_begin,
     preg_end,
     point_reg: INTEGER
-
     uframe_reg,
     utool_reg,
     motype_reg,
     calc1_reg,
     calc2_reg: INTEGER
-
     mo_data: rtrn1
 
     ROUTINE id_chk

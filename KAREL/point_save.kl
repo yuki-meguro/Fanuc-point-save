@@ -22,6 +22,7 @@ PROGRAM point_save
 %NOPAUSESHFT
 %NOPAUSE=ERROR+COMMAND+TPENABLE
 %COMMENT = 'Save pg.'
+
 CONST
     --  # 動作情報 数値・位置 レジスタ割付
     --
