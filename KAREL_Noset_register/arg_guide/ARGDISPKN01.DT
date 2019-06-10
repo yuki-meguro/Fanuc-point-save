@@ -1,0 +1,8 @@
+[PROGRAM]
+NAME = "POINT_SAVE"
+ARGUMENT = '2'
+[ARGUMENT]
+N01 = "ìoò^î‘çÜ"
+V02 = "∂∏ºﬁ∏": '0',
+      "¡Æ∏æ›": '1'
+[ENDPROGRAM]
